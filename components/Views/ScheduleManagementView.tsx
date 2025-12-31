@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { Role, ShiftType, User, Branch, UserStatus, Assignment, ScheduleLog, LeaveRequest } from '../../types';
+// Import ShiftConfig to fix unknown type errors
+import { Role, ShiftType, User, Branch, UserStatus, Assignment, ScheduleLog, LeaveRequest, ShiftConfig } from '../../types';
 
 const daysOfWeek = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
 
@@ -193,40 +194,44 @@ const ScheduleManagementView: React.FC<ScheduleManagementViewProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {Object.entries(activeBranch.shifts).map(([type, config]) => (
-                      <tr key={type} className="hover:bg-slate-50/30 transition-all">
-                        <td className="px-8 py-8 w-44">
-                           <div className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
-                              <p className="font-black text-slate-800 text-sm">{config.name}</p>
-                              <p className="text-[9px] text-indigo-500 font-black tracking-widest uppercase mt-1 italic">{config.start} - {config.end}</p>
-                           </div>
-                        </td>
-                        {weekRange.weekDates.map(dateStr => {
-                          const cellAssignments = assignments.filter(a => a.date === dateStr && a.shiftType === type);
-                          const isSelectedStaffAssigned = cellAssignments.some(a => a.userId === selectedStaffId);
-                          const isLocked = new Date(dateStr) < new Date(todayDate);
-                          
-                          return (
-                            <td key={dateStr} className={`p-2 transition-all ${!isLocked && selectedStaffId ? 'cursor-pointer' : ''}`} onClick={() => !isLocked && toggleAssignment(dateStr, type)}>
-                              <div className={`min-h-[120px] p-3 rounded-[2.5rem] border-2 border-dashed flex flex-col gap-2 transition-all ${
-                                isLocked ? 'bg-slate-50 border-slate-50 opacity-40' :
-                                isSelectedStaffAssigned ? 'bg-indigo-600 border-indigo-600 shadow-xl' : 'border-slate-100 bg-slate-50/30 group-hover:bg-white'
-                              }`}>
-                                {cellAssignments.map(as => {
-                                  const staff = users.find(s => s.id === as.userId);
-                                  return (
-                                    <div key={as.userId} className={`flex items-center gap-2 p-2 rounded-2xl border ${as.userId === selectedStaffId ? 'bg-white/10 border-white/20' : 'bg-white border-slate-50 shadow-sm'}`}>
-                                      <img src={staff?.avatar} className="w-6 h-6 rounded-lg bg-slate-100" alt="avatar" />
-                                      <span className={`text-[9px] font-black truncate flex-1 ${as.userId === selectedStaffId ? 'text-white' : 'text-slate-600'}`}>{staff?.name.split(' ').pop()}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                    {Object.entries(activeBranch.shifts).map(([type, details]) => {
+                      // Fixed: Cast details to ShiftConfig to fix unknown type errors
+                      const config = details as ShiftConfig;
+                      return (
+                        <tr key={type} className="hover:bg-slate-50/30 transition-all">
+                          <td className="px-8 py-8 w-44">
+                             <div className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
+                                <p className="font-black text-slate-800 text-sm">{config.name}</p>
+                                <p className="text-[9px] text-indigo-500 font-black tracking-widest uppercase mt-1 italic">{config.start} - {config.end}</p>
+                             </div>
+                          </td>
+                          {weekRange.weekDates.map(dateStr => {
+                            const cellAssignments = assignments.filter(a => a.date === dateStr && a.shiftType === type);
+                            const isSelectedStaffAssigned = cellAssignments.some(a => a.userId === selectedStaffId);
+                            const isLocked = new Date(dateStr) < new Date(todayDate);
+                            
+                            return (
+                              <td key={dateStr} className={`p-2 transition-all ${!isLocked && selectedStaffId ? 'cursor-pointer' : ''}`} onClick={() => !isLocked && toggleAssignment(dateStr, type)}>
+                                <div className={`min-h-[120px] p-3 rounded-[2.5rem] border-2 border-dashed flex flex-col gap-2 transition-all ${
+                                  isLocked ? 'bg-slate-50 border-slate-50 opacity-40' :
+                                  isSelectedStaffAssigned ? 'bg-indigo-600 border-indigo-600 shadow-xl' : 'border-slate-100 bg-slate-50/30 group-hover:bg-white'
+                                }`}>
+                                  {cellAssignments.map(as => {
+                                    const staff = users.find(s => s.id === as.userId);
+                                    return (
+                                      <div key={as.userId} className={`flex items-center gap-2 p-2 rounded-2xl border ${as.userId === selectedStaffId ? 'bg-white/10 border-white/20' : 'bg-white border-slate-50 shadow-sm'}`}>
+                                        <img src={staff?.avatar} className="w-6 h-6 rounded-lg bg-slate-100" alt="avatar" />
+                                        <span className={`text-[9px] font-black truncate flex-1 ${as.userId === selectedStaffId ? 'text-white' : 'text-slate-600'}`}>{staff?.name.split(' ').pop()}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -258,7 +263,9 @@ const ScheduleManagementView: React.FC<ScheduleManagementViewProps> = ({
                     </div>
 
                     <div className="grid grid-cols-1 gap-4">
-                       {Object.entries(activeBranch.shifts).map(([type, config]) => {
+                       {Object.entries(activeBranch.shifts).map(([type, details]) => {
+                          // Fixed: Cast details to ShiftConfig to fix unknown type errors
+                          const config = details as ShiftConfig;
                           const cellAssignments = assignments.filter(a => a.date === dateStr && a.shiftType === type);
                           const isSelectedStaffAssigned = cellAssignments.some(a => a.userId === selectedStaffId);
                           

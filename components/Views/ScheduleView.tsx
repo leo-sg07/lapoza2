@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { Role, Assignment, Branch } from '../../types';
+// Import ShiftConfig to fix unknown type errors
+import { Role, Assignment, Branch, ShiftConfig } from '../../types';
 
 const daysOfWeek = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
 
@@ -72,39 +73,43 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ role, assignments, currentU
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {Object.entries(branchShifts).map(([type, details]) => (
-                <tr key={type} className="hover:bg-slate-50/20 transition-all">
-                  <td className="px-8 py-8 w-40">
-                     <div className="p-4 bg-white border border-slate-100 rounded-2xl">
-                        <p className="font-black text-slate-800 text-sm">{details.name}</p>
-                        <p className="text-[9px] text-indigo-500 font-black tracking-widest uppercase mt-1">{details.start} - {details.end}</p>
-                     </div>
-                  </td>
-                  {weekRange.weekDates.map(dateStr => {
-                    const cellAssignments = assignments.filter(a => a.date === dateStr && a.shiftType === type);
-                    const isMyShift = cellAssignments.some(a => a.userId === currentUserId);
-                    
-                    return (
-                      <td key={dateStr} className="p-2">
-                        <div className={`min-h-[100px] p-4 rounded-[2rem] border-2 transition-all flex flex-col items-center justify-center gap-2 ${
-                          isMyShift 
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-100 scale-[1.05]' 
-                            : 'border-slate-50 bg-slate-50/50 grayscale opacity-60'
-                        }`}>
-                          {isMyShift ? (
-                            <>
-                              <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                              <span className="text-[10px] font-black uppercase tracking-widest text-center">Đã xếp</span>
-                            </>
-                          ) : (
-                            <span className="text-[10px] font-bold text-slate-400">---</span>
-                          )}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+              {Object.entries(branchShifts).map(([type, details]) => {
+                // Fixed: Cast details to ShiftConfig to fix unknown type errors
+                const shift = details as ShiftConfig;
+                return (
+                  <tr key={type} className="hover:bg-slate-50/20 transition-all">
+                    <td className="px-8 py-8 w-40">
+                       <div className="p-4 bg-white border border-slate-100 rounded-2xl">
+                          <p className="font-black text-slate-800 text-sm">{shift.name}</p>
+                          <p className="text-[9px] text-indigo-500 font-black tracking-widest uppercase mt-1">{shift.start} - {shift.end}</p>
+                       </div>
+                    </td>
+                    {weekRange.weekDates.map(dateStr => {
+                      const cellAssignments = assignments.filter(a => a.date === dateStr && a.shiftType === type);
+                      const isMyShift = cellAssignments.some(a => a.userId === currentUserId);
+                      
+                      return (
+                        <td key={dateStr} className="p-2">
+                          <div className={`min-h-[100px] p-4 rounded-[2rem] border-2 transition-all flex flex-col items-center justify-center gap-2 ${
+                            isMyShift 
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-100 scale-[1.05]' 
+                              : 'border-slate-50 bg-slate-50/50 grayscale opacity-60'
+                          }`}>
+                            {isMyShift ? (
+                              <>
+                                <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-center">Đã xếp</span>
+                              </>
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-400">---</span>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
