@@ -29,14 +29,27 @@ const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
   return defaultValue;
 };
 
+const DEFAULT_ADMIN: User = {
+  id: 'admin_root',
+  username: 'admin',
+  name: 'Quản trị viên Hệ thống',
+  email: 'admin@lapoza.com',
+  password: '123',
+  role: Role.ADMIN,
+  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
+  status: UserStatus.WORKING,
+  isFirstLogin: false
+};
+
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  // Duy trì phiên đăng nhập: Khởi tạo user từ localStorage
+  const [user, setUser] = useState<User | null>(() => loadFromStorage('currentUser', null));
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // States - Khởi tạo từ Storage để App chạy ngay lập tức (Offline First)
+  // States
   const [branches, setBranches] = useState<Branch[]>(() => loadFromStorage('branches', []));
   const [users, setUsers] = useState<User[]>(() => loadFromStorage('users', []));
   const [attendanceLogs, setAttendanceLogs] = useState<ShiftRecord[]>(() => loadFromStorage('attendanceLogs', []));
@@ -46,18 +59,34 @@ const App: React.FC = () => {
   const [assignments, setAssignments] = useState<Assignment[]>(() => loadFromStorage('assignments', []));
   const [scheduleLogs, setScheduleLogs] = useState<ScheduleLog[]>(() => loadFromStorage('scheduleLogs', []));
 
-  // 1. Initial Load từ Supabase Database thực tế khi mở App
+  // 1. Initial Load từ Supabase
   useEffect(() => {
     const initData = async () => {
       setIsSyncing(true);
       try {
         const data = await db.fetchInitialData();
-        if (data.users.length > 0) setUsers(data.users);
+        
+        // Cập nhật state nếu có dữ liệu từ Cloud
+        if (data.users.length > 0) {
+          setUsers(data.users);
+          // Cập nhật thông tin user hiện tại nếu có thay đổi từ Cloud (như đổi quyền, đổi tên)
+          if (user) {
+            const latestUser = data.users.find((u: User) => u.id === user.id);
+            if (latestUser) {
+              setUser(latestUser);
+              localStorage.setItem('lapoza_currentUser', JSON.stringify(latestUser));
+            }
+          }
+        } else {
+          setUsers([DEFAULT_ADMIN]);
+        }
+
         if (data.branches.length > 0) setBranches(data.branches);
         if (data.attendanceLogs.length > 0) setAttendanceLogs(data.attendanceLogs);
         if (data.leaveRequests.length > 0) setLeaveRequests(data.leaveRequests);
       } catch (e) {
-        console.error("Database connection failed, using offline mode.");
+        console.error("Cloud loading failed, using offline cache.");
+        if (users.length === 0) setUsers([DEFAULT_ADMIN]);
       } finally {
         setIsSyncing(false);
       }
@@ -65,7 +94,7 @@ const App: React.FC = () => {
     initData();
   }, []);
 
-  // 2. Tự động lưu LocalStorage làm Cache
+  // 2. Persistence to LocalStorage (Cache)
   useEffect(() => { localStorage.setItem('lapoza_branches', JSON.stringify(branches)); }, [branches]);
   useEffect(() => { localStorage.setItem('lapoza_users', JSON.stringify(users)); }, [users]);
   useEffect(() => { localStorage.setItem('lapoza_attendanceLogs', JSON.stringify(attendanceLogs)); }, [attendanceLogs]);
@@ -74,21 +103,35 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('lapoza_regulations', JSON.stringify(regulations)); }, [regulations]);
   useEffect(() => { localStorage.setItem('lapoza_assignments', JSON.stringify(assignments)); }, [assignments]);
 
-  // 3. Tự động đồng bộ ngược lên Supabase khi có thay đổi
-  useEffect(() => { if (attendanceLogs.length > 0) db.syncLogs(attendanceLogs); }, [attendanceLogs]);
-  useEffect(() => { if (users.length > 0) db.syncUsers(users); }, [users]);
-  useEffect(() => { if (branches.length > 0) db.syncBranches(branches); }, [branches]);
-  useEffect(() => { if (leaveRequests.length > 0) db.syncRequests(leaveRequests); }, [leaveRequests]);
+  // 3. Tự động đồng bộ lên Supabase
+  useEffect(() => { 
+    const syncAll = async () => {
+      if (branches.length > 0) await db.syncBranches(branches);
+      if (users.length > 0) await db.syncUsers(users);
+      if (attendanceLogs.length > 0) await db.syncLogs(attendanceLogs);
+      if (leaveRequests.length > 0) await db.syncRequests(leaveRequests);
+    };
+    syncAll();
+  }, [branches, users, attendanceLogs, leaveRequests]);
 
   const handleLogin = (u: User) => {
     setUser(u);
+    localStorage.setItem('lapoza_currentUser', JSON.stringify(u));
     setActiveTab('dashboard');
+  };
+
+  const handleLogout = () => {
+    if (window.confirm("Bạn có chắc chắn muốn đăng xuất?")) {
+      setUser(null);
+      localStorage.removeItem('lapoza_currentUser');
+    }
   };
 
   const handlePasswordUpdate = (newPass: string) => {
     if (!user) return;
     const updatedUser = { ...user, password: newPass, isFirstLogin: false };
     setUser(updatedUser);
+    localStorage.setItem('lapoza_currentUser', JSON.stringify(updatedUser));
     setUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
     setIsChangingPassword(false);
     alert('Đổi mật khẩu thành công!');
@@ -117,6 +160,7 @@ const App: React.FC = () => {
       confirmedRegulations: [...(user.confirmedRegulations || []), regId] 
     };
     setUser(updatedUser);
+    localStorage.setItem('lapoza_currentUser', JSON.stringify(updatedUser));
     setUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
     alert('Đã xác nhận đọc quy định!');
   };
@@ -236,7 +280,7 @@ const App: React.FC = () => {
               <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
               Đổi mật khẩu
             </button>
-            <button onClick={() => setUser(null)} className="w-full flex items-center gap-4 px-5 py-4 text-red-500 font-black hover:bg-red-50 rounded-[1.5rem] transition-all text-sm group">
+            <button onClick={handleLogout} className="w-full flex items-center gap-4 px-5 py-4 text-red-500 font-black hover:bg-red-50 rounded-[1.5rem] transition-all text-sm group">
               <svg className="w-5 h-5 group-hover:rotate-180 transition-transform duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
               Đăng xuất
             </button>
