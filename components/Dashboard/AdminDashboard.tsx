@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { User, ShiftRecord, LeaveRequest, Assignment, AppNotification, Regulation, Role, Branch, AttendanceStatus, ShiftClosingData } from '../../types';
+// Added Assignment to the list of imports from types.ts
+import { User, ShiftRecord, LeaveRequest, AppNotification, Regulation, Role, Branch, AttendanceStatus, Assignment } from '../../types';
 import AttendanceModal from '../AttendanceModal';
 import ShiftClosingForm from '../ShiftClosingForm';
 
@@ -47,22 +48,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
   }, [logs, assignments, todayDate, user, branches]);
 
-  const managerShifts = useMemo(() => {
-    if (user.role !== Role.MANAGER) return [];
-    return assignments
-      .filter(a => a.userId === user.id && a.date === todayDate)
-      .map(a => {
-        const logId = `s-${todayDate}-${user.id}-${a.shiftType}`;
-        const existingLog = logs.find(l => l.id === logId);
-        return existingLog || { id: logId, userId: user.id, userName: user.name, userAvatar: user.avatar, date: todayDate, type: a.shiftType, status: 'PENDING', branchId: user.branchId } as ShiftRecord;
-      });
-  }, [assignments, logs, user, todayDate]);
-
-  const handleApproveRequest = (id: string, status: 'APPROVED' | 'REJECTED') => {
-    setLeaveRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r));
-    alert(status === 'APPROVED' ? 'Đã phê duyệt yêu cầu.' : 'Đã từ chối yêu cầu.');
-  };
-
   const handleCreateNotification = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -70,12 +55,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       id: Date.now().toString(),
       title: formData.get('title') as string,
       content: formData.get('content') as string,
-      date: new Date().toISOString().split('T')[0],
+      date: new Date().toLocaleDateString('vi-VN'),
       authorName: user.name,
       branchId: user.role === Role.MANAGER ? user.branchId : undefined
     };
     onAddNotification(newNotif);
     setShowNotifModal(false);
+    alert("Đã đăng thông báo mới!");
   };
 
   const handleUpdateRegulation = (e: React.FormEvent<HTMLFormElement>) => {
@@ -101,162 +87,145 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setEditingReg(null);
   };
 
-  const handleDeleteReg = (id: string) => {
-    if (window.confirm("Bạn có chắc chắn muốn xóa quy định này?")) {
-      setRegulations(prev => prev.filter(r => r.id !== id));
-    }
-  };
-
-  const calculateStatus = (timeStr: string, shiftType: string, isCheckIn: boolean): AttendanceStatus => {
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    const shift = userBranch.shifts[shiftType];
-    const [sHours, sMinutes] = (isCheckIn ? shift.start : shift.end).split(':').map(Number);
-    const nowMinutes = hours * 60 + minutes;
-    const shiftMinutes = sHours * 60 + sMinutes;
-    if (isCheckIn) return nowMinutes > shiftMinutes + 5 ? AttendanceStatus.LATE : AttendanceStatus.ON_TIME;
-    return nowMinutes < shiftMinutes ? AttendanceStatus.EARLY_LEAVE : AttendanceStatus.ON_TIME;
-  };
-
-  const handleAttendanceSuccess = (photo: string) => {
-    if (!activeAttendance) return;
-    const { type, shiftId } = activeAttendance;
-    const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    const targetShift = managerShifts.find(s => s.id === shiftId);
-    if (!targetShift) return;
-    const status = calculateStatus(timeStr, targetShift.type, type === 'CHECK_IN');
-    const updatedRecord = type === 'CHECK_IN' 
-      ? { ...targetShift, checkInTime: timeStr, checkInPhoto: photo, checkInStatus: status } 
-      : { ...targetShift, checkOutTime: timeStr, checkOutPhoto: photo, checkOutStatus: status };
-    onAttendanceUpdate(updatedRecord);
-    setActiveAttendance(null);
-    if (type === 'CHECK_OUT') setShowClosingForm(shiftId);
+  const handleApproveRequest = (id: string, status: 'APPROVED' | 'REJECTED') => {
+    setLeaveRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r));
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-8 animate-in pb-20 overflow-y-auto max-h-screen">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="p-4 md:p-6 space-y-6 animate-in pb-32">
+      {/* Header Mobile Optimized */}
+      <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight italic">
-            Tổng quan <span className="text-indigo-600">{user.role === Role.ADMIN ? 'Hệ thống' : 'Chi nhánh'}</span>
-          </h1>
-          <p className="text-slate-500 font-medium">Hôm nay: <span className="font-bold">{new Date().toLocaleDateString('vi-VN')}</span></p>
+          <h1 className="text-xl font-black text-slate-800 tracking-tight italic">Tổng quan <span className="text-indigo-600">Lapoza</span></h1>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' })}</p>
         </div>
-        <div className="flex gap-3">
-          <button onClick={() => setShowNotifModal(true)} className="bg-indigo-600 text-white px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl">Tạo thông báo</button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowNotifModal(true)} className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100 active:scale-90 transition-transform">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+          </button>
           {user.role === Role.ADMIN && (
-            <button onClick={() => { setEditingReg(null); setShowRegModal(true); }} className="bg-slate-800 text-white px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest">Thêm quy định</button>
+            <button onClick={() => { setEditingReg(null); setShowRegModal(true); }} className="w-10 h-10 bg-slate-800 text-white rounded-xl flex items-center justify-center active:scale-90 transition-transform">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            </button>
           )}
         </div>
       </header>
 
-      {user.role === Role.MANAGER && managerShifts.length > 0 && (
-        <div className="bg-indigo-50 border-2 border-indigo-100 rounded-[3rem] p-8 shadow-sm">
-           <div className="flex justify-between items-center mb-6">
-              <h3 className="font-black text-indigo-600 uppercase text-xs tracking-[0.2em] italic">Lịch trực của Quản lý</h3>
-           </div>
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {managerShifts.map(shift => (
-                <div key={shift.id} className="bg-white border border-indigo-100 rounded-[2.5rem] p-6 flex flex-col shadow-sm">
-                    <div className="flex justify-between items-center mb-4">
-                       <p className="text-sm font-black text-slate-800 italic">Ca {shift.type.split('_').pop()}</p>
-                       <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-100 text-amber-700">{shift.status}</span>
-                    </div>
-                    <div className="mt-auto">
-                       {!shift.checkInTime ? (
-                         <button onClick={() => setActiveAttendance({ type: 'CHECK_IN', shiftId: shift.id })} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest">Vào Ca</button>
-                       ) : shift.status !== 'COMPLETED' ? (
-                         <button onClick={() => setActiveAttendance({ type: 'CHECK_OUT', shiftId: shift.id })} className="w-full bg-slate-800 text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest">Ra Ca & Chốt</button>
-                       ) : <div className="text-center py-3 bg-slate-100 rounded-xl text-[9px] font-black text-slate-400 uppercase">Hoàn thành</div>}
-                    </div>
-                </div>
-              ))}
-           </div>
+      {/* Stats Cards - Grid 2 columns for Mobile */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Điểm danh</p>
+          <p className="text-xl font-black text-slate-800">{todayStats.checkIns}/{todayStats.totalScheduled}</p>
+          <div className="w-full bg-slate-100 h-1 rounded-full mt-2 overflow-hidden">
+             <div className="bg-indigo-600 h-full transition-all duration-1000" style={{ width: `${todayStats.attendanceRate}%` }}></div>
+          </div>
         </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white border border-slate-200 p-6 rounded-[2rem] shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tỷ lệ điểm danh</p>
-          <p className="text-3xl font-black text-slate-800">{todayStats.checkIns}/{todayStats.totalScheduled} <span className="text-xs font-bold text-indigo-500">({todayStats.attendanceRate}%)</span></p>
+        <div className="bg-indigo-600 p-4 rounded-3xl shadow-lg shadow-indigo-100 text-white">
+          <p className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-1">Tỷ lệ</p>
+          <p className="text-xl font-black">{todayStats.attendanceRate}%</p>
+          <p className="text-[8px] font-bold opacity-60 mt-2 italic">Dữ liệu thực tế</p>
         </div>
-        <div className="bg-white border border-slate-200 p-6 rounded-[2rem] shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Ca đã chốt</p>
-          <p className="text-3xl font-black text-slate-800">{todayStats.closedShifts}</p>
+        <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Đã chốt ca</p>
+          <p className="text-xl font-black text-slate-800">{todayStats.closedShifts}</p>
         </div>
-        <div className="bg-white border border-slate-200 p-6 rounded-[2rem] shadow-sm border-amber-100 bg-amber-50/20">
-          <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Đợi duyệt đối soát</p>
-          <p className="text-3xl font-black text-amber-600">{todayStats.pendingApprovals}</p>
+        <div className={`p-4 rounded-3xl border shadow-sm ${todayStats.pendingApprovals > 0 ? 'bg-amber-50 border-amber-100 text-amber-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+          <p className="text-[9px] font-black uppercase tracking-widest mb-1">Đợi duyệt</p>
+          <p className="text-xl font-black">{todayStats.pendingApprovals}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          <div className="bg-white border border-slate-200 rounded-[3rem] overflow-hidden shadow-sm">
-            <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
-              <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">Quản lý Quy định & Hướng dẫn</h3>
+      {/* Requests Section - Scrollable horizontally or simple card stack */}
+      <section className="space-y-3">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Yêu cầu chờ duyệt</h3>
+        {leaveRequests.filter(r => r.status === 'PENDING').length === 0 ? (
+          <div className="bg-slate-50 border border-dashed border-slate-200 rounded-3xl p-6 text-center text-[10px] font-bold text-slate-400 uppercase">Trống</div>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto pb-2 snap-x custom-scrollbar">
+            {leaveRequests.filter(r => r.status === 'PENDING').map(req => (
+              <div key={req.id} className="min-w-[240px] snap-center bg-white border border-slate-100 p-4 rounded-3xl shadow-sm space-y-3">
+                <div className="flex items-center gap-2">
+                  <img src={req.userAvatar} className="w-8 h-8 rounded-lg" alt="" />
+                  <div>
+                    <p className="text-xs font-black text-slate-800">{req.userName}</p>
+                    <p className="text-[8px] text-indigo-500 font-bold uppercase">{req.date}</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500 italic line-clamp-2">"{req.reason}"</p>
+                <div className="flex gap-2">
+                  <button onClick={() => handleApproveRequest(req.id, 'APPROVED')} className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase">Duyệt</button>
+                  <button onClick={() => handleApproveRequest(req.id, 'REJECTED')} className="flex-1 py-2 bg-slate-100 text-slate-400 rounded-xl text-[9px] font-black uppercase">Hủy</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Regulations List - Fixed display errors */}
+      <section className="space-y-3">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Quy định hiện hành</h3>
+        <div className="space-y-3">
+          {regulations.map(reg => (
+            <div key={reg.id} className="bg-white border border-slate-100 p-5 rounded-[2rem] shadow-sm group">
+              <div className="flex justify-between items-start mb-2">
+                <h4 className="text-sm font-black text-slate-800 italic">{reg.title}</h4>
+                <div className="flex gap-1">
+                   <button onClick={() => { setEditingReg(reg); setShowRegModal(true); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
+                </div>
+              </div>
+              {/* Fix: whitespace-pre-wrap to handle newlines, break-words to handle long strings */}
+              <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap break-words italic">{reg.content}</p>
+              <p className="text-[8px] text-slate-300 font-bold uppercase mt-3">Cập nhật: {reg.updatedAt}</p>
             </div>
-            <div className="divide-y divide-slate-100 p-4 space-y-4">
-              {regulations.map((reg) => (
-                <div key={reg.id} className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex justify-between items-start group">
+          ))}
+        </div>
+      </section>
+
+      {/* Bottom Sheet Modal - Tối ưu cho Mobile */}
+      {(showNotifModal || showRegModal) && (
+        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => { setShowNotifModal(false); setShowRegModal(false); }}></div>
+          <div className="bg-white w-full max-w-lg rounded-t-[3rem] sm:rounded-[3rem] shadow-2xl relative z-10 animate-in p-8 sm:p-10 max-h-[90vh] overflow-y-auto">
+            <div className="w-12 h-1.5 bg-slate-100 rounded-full mx-auto mb-6 sm:hidden"></div>
+            
+            {showNotifModal ? (
+              <>
+                <h3 className="text-xl font-black text-slate-800 mb-6 italic">Đăng <span className="text-indigo-600">Thông báo</span> mới</h3>
+                <form onSubmit={handleCreateNotification} className="space-y-5">
                   <div className="space-y-1">
-                    <p className="font-black text-slate-800 text-sm tracking-tight">{reg.title}</p>
-                    <p className="text-xs text-slate-500 line-clamp-2 italic">{reg.content}</p>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-2">Cập nhật: {reg.updatedAt}</p>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Tiêu đề ngắn</label>
+                    <input name="title" required className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl px-5 py-4 outline-none font-bold text-sm" placeholder="VD: Lịch họp tháng 4..." />
                   </div>
-                  {user.role === Role.ADMIN && (
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => { setEditingReg(reg); setShowRegModal(true); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                      </button>
-                      <button onClick={() => handleDeleteReg(reg.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-8">
-          <div className="bg-white border border-slate-200 rounded-[3rem] p-8 shadow-sm">
-            <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-6">Yêu cầu cần duyệt</h3>
-            <div className="space-y-4">
-              {leaveRequests.filter(r => r.status === 'PENDING').slice(0, 3).map(req => (
-                <div key={req.id} className="p-5 bg-amber-50/30 border border-amber-100 rounded-3xl space-y-3">
-                  <p className="text-sm font-bold text-slate-800">{req.userName}</p>
-                  <p className="text-xs text-slate-500 italic">"{req.reason}"</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => handleApproveRequest(req.id, 'APPROVED')} className="flex-1 py-2 text-[10px] font-black text-white bg-indigo-600 rounded-xl">Duyệt</button>
-                    <button onClick={() => handleApproveRequest(req.id, 'REJECTED')} className="flex-1 py-2 text-[10px] font-black text-slate-400 bg-white border border-slate-100 rounded-xl">Hủy</button>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Nội dung chi tiết</label>
+                    <textarea name="content" required rows={4} className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl px-5 py-4 outline-none font-medium text-sm" placeholder="Nhập nội dung cần truyền tải..."></textarea>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {showRegModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[110] p-4">
-          <div className="bg-white rounded-[3rem] w-full max-w-md shadow-2xl animate-in p-10">
-            <h3 className="text-2xl font-black text-slate-800 mb-8 italic">{editingReg ? 'Chỉnh sửa quy định' : 'Thêm quy định mới'}</h3>
-            <form onSubmit={handleUpdateRegulation} className="space-y-6">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Tiêu đề</label>
-                <input name="title" required className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl px-6 py-4 outline-none font-bold" defaultValue={editingReg?.title} placeholder="VD: Nội quy chấm công" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nội dung</label>
-                <textarea name="content" required rows={6} className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl px-6 py-4 outline-none font-medium text-sm" defaultValue={editingReg?.content} placeholder="Nhập nội dung quy định..."></textarea>
-              </div>
-              <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => { setShowRegModal(false); setEditingReg(null); }} className="flex-1 py-5 bg-slate-100 text-slate-600 rounded-2xl font-black transition-all">Hủy</button>
-                <button type="submit" className="flex-[2] py-5 bg-indigo-600 text-white rounded-2xl font-black shadow-xl">Cập nhật nội dung</button>
-              </div>
-            </form>
+                  <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={() => setShowNotifModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs">Đóng</button>
+                    <button type="submit" className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs shadow-xl shadow-indigo-100">Đăng ngay</button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <>
+                <h3 className="text-xl font-black text-slate-800 mb-6 italic">{editingReg ? 'Sửa' : 'Thêm'} <span className="text-indigo-600">Quy định</span></h3>
+                <form onSubmit={handleUpdateRegulation} className="space-y-5">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Tiêu đề quy định</label>
+                    <input name="title" defaultValue={editingReg?.title} required className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl px-5 py-4 outline-none font-bold text-sm" placeholder="VD: Quy trình chốt ca..." />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Nội dung (hỗ trợ xuống dòng)</label>
+                    <textarea name="content" defaultValue={editingReg?.content} required rows={6} className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl px-5 py-4 outline-none font-medium text-sm" placeholder="1. Bước một...&#10;2. Bước hai..."></textarea>
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={() => setShowRegModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs">Đóng</button>
+                    <button type="submit" className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs shadow-xl shadow-indigo-100">Lưu dữ liệu</button>
+                  </div>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}
