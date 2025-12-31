@@ -29,7 +29,8 @@ const StaffManagementView: React.FC<StaffManagementViewProps> = ({ role, branche
       branchId: formData.get('branchId') as string,
       avatar: editingUser?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.get('username')}`,
       password: editingUser?.password || '123',
-      isFirstLogin: editingUser ? editingUser.isFirstLogin : false
+      isFirstLogin: editingUser ? editingUser.isFirstLogin : false,
+      confirmedRegulations: editingUser?.confirmedRegulations || []
     };
 
     if (editingUser) {
@@ -46,6 +47,14 @@ const StaffManagementView: React.FC<StaffManagementViewProps> = ({ role, branche
     if (window.confirm('Reset mật khẩu nhân viên này về "123"?')) {
       setUsers(users.map(u => u.id === id ? { ...u, password: '123' } : u));
       alert('Đã reset thành công về mật khẩu mặc định.');
+    }
+  };
+
+  const handleDeleteUser = (id: string, name: string) => {
+    if (!isAdmin) return;
+    if (window.confirm(`CẢNH BÁO: Bạn có chắc chắn muốn XÓA VĨNH VIỄN tài khoản của [${name}] không? Hành động này không thể hoàn tác.`)) {
+      setUsers(prev => prev.filter(u => u.id !== id));
+      alert(`Đã xóa tài khoản ${name} khỏi hệ thống.`);
     }
   };
 
@@ -69,12 +78,13 @@ const StaffManagementView: React.FC<StaffManagementViewProps> = ({ role, branche
 
       <div className="bg-white border border-slate-100 rounded-[3rem] overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px]">
+          <table className="w-full min-w-[900px]">
             <thead>
               <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">
                 <th className="px-8 py-6">Nhân viên / Liên hệ</th>
                 <th className="px-8 py-6">Vai trò</th>
                 <th className="px-8 py-6">Chi nhánh</th>
+                <th className="px-8 py-6 text-center">Trạng thái</th>
                 <th className="px-8 py-6 text-right">Hành động</th>
               </tr>
             </thead>
@@ -98,7 +108,14 @@ const StaffManagementView: React.FC<StaffManagementViewProps> = ({ role, branche
                   <td className="px-8 py-6 font-bold text-slate-600 italic">
                     {branches.find(b => b.id === u.branchId)?.name || 'Hệ thống'}
                   </td>
-                  <td className="px-8 py-6 text-right space-x-2">
+                  <td className="px-8 py-6 text-center">
+                    {u.status === UserStatus.WORKING ? (
+                      <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-emerald-100">Đang làm việc</span>
+                    ) : (
+                      <span className="bg-red-50 text-red-600 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-red-100">Đã nghỉ việc</span>
+                    )}
+                  </td>
+                  <td className="px-8 py-6 text-right">
                     {isAdmin && (
                       <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => handleResetPassword(u.id)} className="text-amber-500 hover:bg-amber-50 p-2.5 rounded-xl transition-all" title="Reset mật khẩu">
@@ -106,6 +123,9 @@ const StaffManagementView: React.FC<StaffManagementViewProps> = ({ role, branche
                         </button>
                         <button onClick={() => { setEditingUser(u); setShowModal(true); }} className="text-indigo-600 hover:bg-indigo-50 p-2.5 rounded-xl transition-all" title="Sửa thông tin">
                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        </button>
+                        <button onClick={() => handleDeleteUser(u.id, u.name)} className="text-red-500 hover:bg-red-50 p-2.5 rounded-xl transition-all" title="Xóa tài khoản">
+                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         </button>
                       </div>
                     )}
@@ -152,7 +172,15 @@ const StaffManagementView: React.FC<StaffManagementViewProps> = ({ role, branche
                   </select>
                 </div>
               </div>
-              <input type="hidden" name="status" value={UserStatus.WORKING} />
+              
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Trạng thái làm việc</label>
+                <select name="status" defaultValue={editingUser?.status || UserStatus.WORKING} className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-600 rounded-2xl px-6 py-4 outline-none font-bold">
+                  <option value={UserStatus.WORKING}>Đang làm việc (Kích hoạt)</option>
+                  <option value={UserStatus.RESIGNED}>Đã nghỉ việc (Vô hiệu hóa)</option>
+                </select>
+              </div>
+
               <div className="flex gap-4 pt-4">
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-5 bg-slate-100 text-slate-600 rounded-2xl font-black transition-all">Hủy</button>
                 <button type="submit" className="flex-[2] py-5 bg-indigo-600 text-white rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all">Lưu dữ liệu</button>
