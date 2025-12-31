@@ -1,6 +1,5 @@
 
 import React, { useState, useMemo } from 'react';
-// Import ShiftConfig to fix unknown type errors
 import { Role, ShiftType, User, Branch, UserStatus, Assignment, ScheduleLog, LeaveRequest, ShiftConfig } from '../../types';
 
 const daysOfWeek = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
@@ -19,7 +18,8 @@ interface ScheduleManagementViewProps {
 const ScheduleManagementView: React.FC<ScheduleManagementViewProps> = ({ 
   branches, assignments, setAssignments, logs, setLogs, requests, user, users 
 }) => {
-  const [activeBranchId, setActiveBranchId] = useState(user.branchId || '1');
+  // Ưu tiên lấy chi nhánh của user, nếu không có lấy chi nhánh đầu tiên trong danh sách
+  const [activeBranchId, setActiveBranchId] = useState(user.branchId || (branches.length > 0 ? branches[0].id : ''));
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [flashMessage, setFlashMessage] = useState<{title: string, desc: string} | null>(null);
@@ -28,22 +28,31 @@ const ScheduleManagementView: React.FC<ScheduleManagementViewProps> = ({
 
   const weekRange = useMemo(() => {
     const today = new Date();
-    const day = today.getDay();
-    const diffToMonday = today.getDate() - day + (day === 0 ? -6 : 1);
-    const startOfWeek = new Date(today.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1) + weekOffset * 7));
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1) + weekOffset * 7);
     startOfWeek.setHours(0, 0, 0, 0);
+    
     const weekDates = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(startOfWeek);
       d.setDate(startOfWeek.getDate() + i);
       return d.toISOString().split('T')[0];
     });
+    
     const startDateStr = new Date(weekDates[0]).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
     const endDateStr = new Date(weekDates[6]).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
     return { weekDates, displayRange: `${startDateStr} - ${endDateStr}` };
   }, [weekOffset]);
 
   const activeBranch = branches.find(b => b.id === activeBranchId) || branches[0];
-  const assignableUsers = users.filter(u => u.role !== Role.ADMIN && u.status === UserStatus.WORKING && u.branchId === activeBranchId);
+  
+  // Lọc nhân viên thuộc chi nhánh đang chọn
+  const assignableUsers = useMemo(() => {
+    return users.filter(u => 
+      u.role !== Role.ADMIN && 
+      u.status === UserStatus.WORKING && 
+      u.branchId === activeBranchId
+    );
+  }, [users, activeBranchId]);
 
   const triggerFlash = (title: string, desc: string) => {
     setFlashMessage({ title, desc });
@@ -62,7 +71,7 @@ const ScheduleManagementView: React.FC<ScheduleManagementViewProps> = ({
 
   const toggleAssignment = (dateStr: string, shiftType: string) => {
     if (!selectedStaffId) {
-        alert("Vui lòng chọn một nhân viên từ danh sách trước khi xếp lịch.");
+        alert("Vui lòng chọn một nhân viên từ danh sách bên trái trước khi xếp lịch.");
         return;
     }
     const targetDate = new Date(dateStr);
@@ -94,13 +103,13 @@ const ScheduleManagementView: React.FC<ScheduleManagementViewProps> = ({
   };
 
   const handleSave = () => {
-    addLog(`Đã lưu lịch tuần ${weekRange.displayRange}`);
+    addLog(`Đã lưu lịch tuần ${weekRange.displayRange} - ${activeBranch?.name}`);
     triggerFlash("Hệ thống đã lưu!", "Dữ liệu lịch làm việc đã được đồng bộ vào Database.");
   };
 
   const handleSendEmail = () => {
-    addLog(`Đã gửi email lịch tuần ${weekRange.displayRange}`);
-    triggerFlash("Email đã gửi!", "Toàn bộ nhân viên chi nhánh đã nhận được thông báo lịch mới.");
+    addLog(`Đã gửi email lịch tuần ${weekRange.displayRange} cho ${activeBranch?.name}`);
+    triggerFlash("Email đã gửi!", "Nhân viên tại chi nhánh này đã nhận được thông báo lịch mới.");
   };
 
   const selectedStaff = users.find(u => u.id === selectedStaffId);
@@ -123,18 +132,31 @@ const ScheduleManagementView: React.FC<ScheduleManagementViewProps> = ({
       )}
 
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         <div className="space-y-1">
           <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight italic">Quản lý <span className="text-indigo-600">Điều phối</span></h2>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">{weekRange.displayRange}</span>
+          <div className="flex flex-wrap items-center gap-3 mt-2">
+            <span className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-xl">{weekRange.displayRange}</span>
+            
+            {/* Bộ chọn chi nhánh quan trọng */}
+            <select 
+              value={activeBranchId} 
+              onChange={(e) => {
+                setActiveBranchId(e.target.value);
+                setSelectedStaffId(null); // Reset chọn nhân viên khi đổi chi nhánh
+              }}
+              className="bg-white border-2 border-indigo-100 text-indigo-600 px-4 py-1.5 rounded-xl text-xs font-black outline-none focus:border-indigo-600 transition-all"
+            >
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+
             {selectedStaff && (
-                <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full animate-pulse italic">Đang xếp: {selectedStaff.name}</span>
+                <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl animate-pulse italic border border-indigo-100">Đang xếp: {selectedStaff.name}</span>
             )}
           </div>
         </div>
         
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
           <div className="flex p-1 bg-white border border-slate-100 rounded-2xl shadow-sm flex-1 md:flex-none justify-between">
             <button onClick={() => setWeekOffset(prev => prev - 1)} className="px-3 py-2 text-slate-400 hover:text-indigo-600 transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7"></path></svg>
@@ -151,158 +173,173 @@ const ScheduleManagementView: React.FC<ScheduleManagementViewProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
-        {/* Staff List - Desktop: Sidebar, Mobile: Horizontal Scroll */}
-        <div className="lg:col-span-1 flex flex-col space-y-4">
-           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-4">Nhân sự chi nhánh</h3>
-           <div className="flex lg:flex-col overflow-x-auto lg:overflow-y-auto gap-3 pb-4 lg:pb-0 custom-scrollbar lg:max-h-[60vh]">
-              {assignableUsers.map(staff => (
-                <button 
-                  key={staff.id} 
-                  onClick={() => setSelectedStaffId(selectedStaffId === staff.id ? null : staff.id)}
-                  className={`flex items-center gap-3 p-3 lg:p-4 rounded-3xl transition-all border-2 shrink-0 lg:shrink min-w-[160px] lg:min-w-0 ${
-                    selectedStaffId === staff.id 
-                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-100 scale-[1.02]' 
-                    : 'bg-white border-slate-50 text-slate-600 shadow-sm'
-                  }`}
-                >
-                  <img src={staff.avatar} className={`w-8 h-8 lg:w-10 lg:h-10 rounded-xl ${selectedStaffId === staff.id ? 'bg-white/20' : 'bg-slate-100'}`} alt="avatar" />
-                  <div className="text-left overflow-hidden">
-                    <p className="text-xs lg:text-sm font-black truncate">{staff.name}</p>
-                    <p className={`text-[9px] uppercase font-bold truncate ${selectedStaffId === staff.id ? 'text-indigo-200' : 'text-slate-400'}`}>{staff.username}</p>
-                  </div>
-                </button>
-              ))}
-           </div>
+      {!activeBranch ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-20 bg-white border-2 border-dashed border-slate-200 rounded-[3rem]">
+          <p className="text-slate-400 font-black italic uppercase">Vui lòng tạo ít nhất một chi nhánh trong phần Hệ Thống</p>
         </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
+          {/* Staff List */}
+          <div className="lg:col-span-1 flex flex-col space-y-4">
+             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-4 italic">Nhân sự {activeBranch.name}</h3>
+             <div className="flex lg:flex-col overflow-x-auto lg:overflow-y-auto gap-3 pb-4 lg:pb-0 custom-scrollbar lg:max-h-[65vh]">
+                {assignableUsers.length === 0 ? (
+                  <div className="p-8 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl text-center">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase leading-relaxed">Chưa có nhân viên nào thuộc chi nhánh này</p>
+                    <p className="text-[8px] text-slate-300 mt-2 font-medium">Hãy vào mục Nhân Sự để gán nhân viên vào chi nhánh.</p>
+                  </div>
+                ) : (
+                  assignableUsers.map(staff => (
+                    <button 
+                      key={staff.id} 
+                      onClick={() => setSelectedStaffId(selectedStaffId === staff.id ? null : staff.id)}
+                      className={`flex items-center gap-3 p-3 lg:p-4 rounded-3xl transition-all border-2 shrink-0 lg:shrink min-w-[180px] lg:min-w-0 ${
+                        selectedStaffId === staff.id 
+                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-100 scale-[1.02]' 
+                        : 'bg-white border-slate-50 text-slate-600 shadow-sm hover:border-indigo-100'
+                      }`}
+                    >
+                      <img src={staff.avatar} className={`w-8 h-8 lg:w-10 lg:h-10 rounded-xl ${selectedStaffId === staff.id ? 'bg-white/20' : 'bg-slate-100'}`} alt="avatar" />
+                      <div className="text-left overflow-hidden">
+                        <p className="text-xs lg:text-sm font-black truncate">{staff.name}</p>
+                        <p className={`text-[9px] uppercase font-bold truncate ${selectedStaffId === staff.id ? 'text-indigo-200' : 'text-slate-400'}`}>{staff.username}</p>
+                      </div>
+                    </button>
+                  ))
+                )}
+             </div>
+          </div>
 
-        {/* Schedule Display */}
-        <div className="lg:col-span-3 space-y-6">
-           {/* Desktop View: Table */}
-           <div className="hidden lg:block bg-white border border-slate-200 rounded-[3rem] shadow-sm overflow-hidden h-full flex flex-col">
-              <div className="overflow-x-auto flex-1">
-                <table className="w-full min-w-[900px]">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Ca trực</th>
-                      {daysOfWeek.map((day, idx) => (
-                        <th key={day} className="px-4 py-6 text-center">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{day}</p>
-                          <p className="text-[11px] font-bold text-indigo-500 mt-1">{new Date(weekRange.weekDates[idx]).getDate()}/{new Date(weekRange.weekDates[idx]).getMonth() + 1}</p>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {Object.entries(activeBranch.shifts).map(([type, details]) => {
-                      // Fixed: Cast details to ShiftConfig to fix unknown type errors
-                      const config = details as ShiftConfig;
-                      return (
-                        <tr key={type} className="hover:bg-slate-50/30 transition-all">
-                          <td className="px-8 py-8 w-44">
-                             <div className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
-                                <p className="font-black text-slate-800 text-sm">{config.name}</p>
-                                <p className="text-[9px] text-indigo-500 font-black tracking-widest uppercase mt-1 italic">{config.start} - {config.end}</p>
-                             </div>
-                          </td>
-                          {weekRange.weekDates.map(dateStr => {
-                            const cellAssignments = assignments.filter(a => a.date === dateStr && a.shiftType === type);
-                            const isSelectedStaffAssigned = cellAssignments.some(a => a.userId === selectedStaffId);
-                            const isLocked = new Date(dateStr) < new Date(todayDate);
-                            
-                            return (
-                              <td key={dateStr} className={`p-2 transition-all ${!isLocked && selectedStaffId ? 'cursor-pointer' : ''}`} onClick={() => !isLocked && toggleAssignment(dateStr, type)}>
-                                <div className={`min-h-[120px] p-3 rounded-[2.5rem] border-2 border-dashed flex flex-col gap-2 transition-all ${
-                                  isLocked ? 'bg-slate-50 border-slate-50 opacity-40' :
-                                  isSelectedStaffAssigned ? 'bg-indigo-600 border-indigo-600 shadow-xl' : 'border-slate-100 bg-slate-50/30 group-hover:bg-white'
-                                }`}>
-                                  {cellAssignments.map(as => {
-                                    const staff = users.find(s => s.id === as.userId);
-                                    return (
-                                      <div key={as.userId} className={`flex items-center gap-2 p-2 rounded-2xl border ${as.userId === selectedStaffId ? 'bg-white/10 border-white/20' : 'bg-white border-slate-50 shadow-sm'}`}>
-                                        <img src={staff?.avatar} className="w-6 h-6 rounded-lg bg-slate-100" alt="avatar" />
-                                        <span className={`text-[9px] font-black truncate flex-1 ${as.userId === selectedStaffId ? 'text-white' : 'text-slate-600'}`}>{staff?.name.split(' ').pop()}</span>
-                                      </div>
-                                    );
-                                  })}
+          {/* Schedule Display */}
+          <div className="lg:col-span-3 space-y-6">
+             {/* Desktop View: Table */}
+             <div className="hidden lg:block bg-white border border-slate-200 rounded-[3rem] shadow-sm overflow-hidden h-full flex flex-col">
+                <div className="overflow-x-auto flex-1">
+                  <table className="w-full min-w-[900px]">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                        <th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Ca trực</th>
+                        {daysOfWeek.map((day, idx) => (
+                          <th key={day} className="px-4 py-6 text-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{day}</p>
+                            <p className="text-[11px] font-bold text-indigo-500 mt-1">{new Date(weekRange.weekDates[idx]).getDate()}/{new Date(weekRange.weekDates[idx]).getMonth() + 1}</p>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {Object.entries(activeBranch.shifts || {}).length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-20 text-center text-slate-300 italic font-black uppercase text-xs tracking-widest">Vui lòng thiết lập Ca Trực cho chi nhánh này</td>
+                        </tr>
+                      ) : (
+                        Object.entries(activeBranch.shifts).map(([type, details]) => {
+                          const config = details as ShiftConfig;
+                          return (
+                            <tr key={type} className="hover:bg-slate-50/30 transition-all">
+                              <td className="px-8 py-8 w-44">
+                                <div className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
+                                    <p className="font-black text-slate-800 text-sm">{config.name}</p>
+                                    <p className="text-[9px] text-indigo-500 font-black tracking-widest uppercase mt-1 italic">{config.start} - {config.end}</p>
                                 </div>
                               </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-           </div>
-
-           {/* Mobile View: Vertical Days Stack */}
-           <div className="lg:hidden space-y-6">
-              {weekRange.weekDates.map((dateStr, idx) => {
-                const dayName = daysOfWeek[idx];
-                const dateObj = new Date(dateStr);
-                const isToday = dateStr === todayDate;
-                const isLocked = dateObj < new Date(todayDate);
-
-                return (
-                  <div key={dateStr} className={`bg-white border rounded-[2.5rem] p-6 shadow-sm space-y-6 transition-all ${isToday ? 'border-indigo-200 ring-2 ring-indigo-50 shadow-indigo-50' : 'border-slate-100'}`}>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                         <div className={`w-10 h-10 rounded-2xl flex flex-col items-center justify-center font-black ${isToday ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                            <span className="text-[8px] uppercase">{dayName.split(' ')[1]}</span>
-                            <span className="text-sm">{dateObj.getDate()}</span>
-                         </div>
-                         <div>
-                            <p className="font-black text-slate-800 text-sm">{dayName}</p>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{dateObj.toLocaleDateString('vi-VN')}</p>
-                         </div>
-                      </div>
-                      {isToday && <span className="bg-green-50 text-green-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">Hôm nay</span>}
-                      {isLocked && <span className="text-slate-300 italic text-[10px] font-bold">Đã qua</span>}
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4">
-                       {Object.entries(activeBranch.shifts).map(([type, details]) => {
-                          // Fixed: Cast details to ShiftConfig to fix unknown type errors
-                          const config = details as ShiftConfig;
-                          const cellAssignments = assignments.filter(a => a.date === dateStr && a.shiftType === type);
-                          const isSelectedStaffAssigned = cellAssignments.some(a => a.userId === selectedStaffId);
-                          
-                          return (
-                            <div 
-                                key={type} 
-                                onClick={() => !isLocked && toggleAssignment(dateStr, type)}
-                                className={`flex flex-col gap-3 p-5 rounded-[2rem] border-2 transition-all active:scale-[0.98] ${
-                                    isSelectedStaffAssigned 
-                                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-100' 
-                                    : 'bg-slate-50/50 border-slate-50'
-                                } ${isLocked ? 'opacity-50 grayscale' : ''}`}
-                            >
-                               <div className="flex justify-between items-center">
-                                  <div>
-                                     <p className={`text-xs font-black uppercase tracking-widest ${isSelectedStaffAssigned ? 'text-indigo-100' : 'text-slate-400'}`}>{config.name}</p>
-                                     <p className={`text-[10px] font-bold mt-0.5 ${isSelectedStaffAssigned ? 'text-white' : 'text-slate-600'}`}>{config.start} - {config.end}</p>
-                                  </div>
-                                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isSelectedStaffAssigned ? 'bg-white/20' : 'bg-white border border-slate-100 shadow-sm'}`}>
-                                     {isSelectedStaffAssigned ? (
-                                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                                     ) : (
-                                        <svg className="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4"></path></svg>
-                                     )}
-                                  </div>
-                               </div>
-
-                               {cellAssignments.length > 0 && (
-                                   <div className="flex flex-wrap gap-2 pt-2 border-t border-black/5">
+                              {weekRange.weekDates.map(dateStr => {
+                                const cellAssignments = assignments.filter(a => a.date === dateStr && a.shiftType === type);
+                                const isSelectedStaffAssigned = cellAssignments.some(a => a.userId === selectedStaffId);
+                                const isLocked = new Date(dateStr) < new Date(todayDate);
+                                
+                                return (
+                                  <td key={dateStr} className={`p-2 transition-all ${!isLocked && selectedStaffId ? 'cursor-pointer' : ''}`} onClick={() => !isLocked && toggleAssignment(dateStr, type)}>
+                                    <div className={`min-h-[120px] p-3 rounded-[2.5rem] border-2 border-dashed flex flex-col gap-2 transition-all ${
+                                      isLocked ? 'bg-slate-50 border-slate-50 opacity-40' :
+                                      isSelectedStaffAssigned ? 'bg-indigo-600 border-indigo-600 shadow-xl' : 'border-slate-100 bg-slate-50/30 group-hover:bg-white hover:border-indigo-100'
+                                    }`}>
                                       {cellAssignments.map(as => {
-                                          const staff = users.find(s => s.id === as.userId);
-                                          return (
-                                              <div key={as.userId} className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[9px] font-black uppercase ${as.userId === selectedStaffId ? 'bg-white/20 text-white' : 'bg-white text-slate-500 shadow-sm'}`}>
-                                                  <img src={staff?.avatar} className="w-4 h-4 rounded-md" alt="avatar" />
-                                                  {staff?.name.split(' ').pop()}
-                                              </div>
-                                          );
+                                        const staff = users.find(s => s.id === as.userId);
+                                        return (
+                                          <div key={as.userId} className={`flex items-center gap-2 p-2 rounded-2xl border ${as.userId === selectedStaffId ? 'bg-white/10 border-white/20' : 'bg-white border-slate-50 shadow-sm'}`}>
+                                            <img src={staff?.avatar} className="w-6 h-6 rounded-lg bg-slate-100" alt="avatar" />
+                                            <span className={`text-[9px] font-black truncate flex-1 ${as.userId === selectedStaffId ? 'text-white' : 'text-slate-600'}`}>{staff?.name.split(' ').pop()}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+             </div>
+
+             {/* Mobile View */}
+             <div className="lg:hidden space-y-6">
+                {weekRange.weekDates.map((dateStr, idx) => {
+                  const dayName = daysOfWeek[idx];
+                  const dateObj = new Date(dateStr);
+                  const isToday = dateStr === todayDate;
+                  const isLocked = dateObj < new Date(todayDate);
+
+                  return (
+                    <div key={dateStr} className={`bg-white border rounded-[2.5rem] p-6 shadow-sm space-y-6 transition-all ${isToday ? 'border-indigo-200 ring-2 ring-indigo-50 shadow-indigo-50' : 'border-slate-100'}`}>
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                           <div className={`w-10 h-10 rounded-2xl flex flex-col items-center justify-center font-black ${isToday ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                              <span className="text-[8px] uppercase">{dayName.split(' ')[1]}</span>
+                              <span className="text-sm">{dateObj.getDate()}</span>
+                           </div>
+                           <div>
+                              <p className="font-black text-slate-800 text-sm">{dayName}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{dateObj.toLocaleDateString('vi-VN')}</p>
+                           </div>
+                        </div>
+                        {isToday && <span className="bg-green-50 text-green-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">Hôm nay</span>}
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4">
+                         {Object.entries(activeBranch.shifts || {}).map(([type, details]) => {
+                            const config = details as ShiftConfig;
+                            const cellAssignments = assignments.filter(a => a.date === dateStr && a.shiftType === type);
+                            const isSelectedStaffAssigned = cellAssignments.some(a => a.userId === selectedStaffId);
+                            
+                            return (
+                              <div 
+                                  key={type} 
+                                  onClick={() => !isLocked && toggleAssignment(dateStr, type)}
+                                  className={`flex flex-col gap-3 p-5 rounded-[2rem] border-2 transition-all active:scale-[0.98] ${
+                                      isSelectedStaffAssigned 
+                                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-100' 
+                                      : 'bg-slate-50/50 border-slate-50 hover:border-indigo-100'
+                                  } ${isLocked ? 'opacity-50 grayscale' : ''}`}
+                              >
+                                 <div className="flex justify-between items-center">
+                                    <div>
+                                       <p className={`text-xs font-black uppercase tracking-widest ${isSelectedStaffAssigned ? 'text-indigo-100' : 'text-slate-400'}`}>{config.name}</p>
+                                       <p className={`text-[10px] font-bold mt-0.5 ${isSelectedStaffAssigned ? 'text-white' : 'text-slate-600'}`}>{config.start} - {config.end}</p>
+                                    </div>
+                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isSelectedStaffAssigned ? 'bg-white/20' : 'bg-white border border-slate-100 shadow-sm'}`}>
+                                       {isSelectedStaffAssigned ? (
+                                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                                       ) : (
+                                          <svg className="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4"></path></svg>
+                                       )}
+                                    </div>
+                                 </div>
+
+                                 {cellAssignments.length > 0 && (
+                                     <div className="flex flex-wrap gap-2 pt-2 border-t border-black/5">
+                                        {cellAssignments.map(as => {
+                                            const staff = users.find(s => s.id === as.userId);
+                                            return (
+                                                <div key={as.userId} className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[9px] font-black uppercase ${as.userId === selectedStaffId ? 'bg-white/20 text-white' : 'bg-white text-slate-500 shadow-sm'}`}>
+                                                    <img src={staff?.avatar} className="w-4 h-4 rounded-md" alt="avatar" />
+                                                    {staff?.name.split(' ').pop()}
+                                                </div>
+                                            );
                                       })}
                                    </div>
                                )}
@@ -316,6 +353,7 @@ const ScheduleManagementView: React.FC<ScheduleManagementViewProps> = ({
            </div>
         </div>
       </div>
+      )}
     </div>
   );
 };
