@@ -46,7 +46,6 @@ export const db = {
   async syncUsers(users: any[]) {
     if (!users || users.length === 0) return;
     
-    // Lọc bỏ những user có branchId không hợp lệ hoặc xử lý dữ liệu trước khi gửi
     const payload = users.map(u => ({
       id: u.id,
       username: u.username,
@@ -56,7 +55,7 @@ export const db = {
       role: u.role,
       avatar: u.avatar || '',
       status: u.status || 'WORKING',
-      branch_id: u.branchId || null, // Nếu không có branchId thì để null
+      branch_id: u.branchId || null,
       is_first_login: u.isFirstLogin || false,
       confirmed_regulations: u.confirmedRegulations || []
     }));
@@ -64,9 +63,6 @@ export const db = {
     const { error } = await supabase.from('users').upsert(payload);
     if (error) {
       console.error('❌ Lỗi đồng bộ Nhân sự:', error.message);
-      if (error.message.includes('foreign key constraint')) {
-        console.warn('💡 Gợi ý: Hãy đảm bảo Chi nhánh của nhân viên này đã được tạo trong mục Hệ Thống trước.');
-      }
     } else {
       console.log('✅ Đã đồng bộ nhân sự lên Cloud.');
     }
@@ -94,9 +90,22 @@ export const db = {
 
   async syncBranches(branches: any[]) {
     if (!branches || branches.length === 0) return;
-    const { error } = await supabase.from('branches').upsert(branches);
+    
+    // MAP DỮ LIỆU ĐỂ KHỚP VỚI CÁC CỘT TRONG HÌNH CHỤP TABLE EDITOR
+    const payload = branches.map(b => ({
+      id: b.id,
+      name: b.name,
+      lat: b.lat,
+      lng: b.lng,
+      radius: b.radius,
+      address: b.address || ''
+      // Tạm thời bỏ qua 'shifts' vì bảng của bạn chưa có cột jsonb này
+    }));
+
+    const { error } = await supabase.from('branches').upsert(payload);
     if (error) {
       console.error('❌ Lỗi đồng bộ Chi nhánh:', error.message);
+      console.log('💡 Gợi ý: Kiểm tra xem các cột id, name, lat, lng, radius, address đã đúng kiểu dữ liệu chưa.');
     } else {
       console.log('✅ Đã đồng bộ chi nhánh lên Cloud.');
     }

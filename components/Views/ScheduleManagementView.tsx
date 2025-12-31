@@ -95,6 +95,7 @@ const ScheduleManagementView: React.FC<ScheduleManagementViewProps> = ({
         userId: selectedStaffId,
         date: dateStr,
         shiftType,
+        branchId: activeBranchId,
         updatedAt: new Date().toISOString(),
         updatedBy: user.name
       }]);

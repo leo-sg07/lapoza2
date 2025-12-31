@@ -49,6 +49,7 @@ export interface Assignment {
   userId: string;
   date: string;
   shiftType: string;
+  branchId?: string;
   updatedAt: string;
   updatedBy: string;
 }
