@@ -1,0 +1,8 @@
+{
+  "name": "ShiftMaster Pro",
+  "description": "A high-performance shift management and smart attendance system with facial verification and geo-fencing.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
