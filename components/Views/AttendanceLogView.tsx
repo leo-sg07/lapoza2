@@ -100,7 +100,7 @@ const AttendanceLogView: React.FC<AttendanceLogViewProps> = ({ role, logs, setLo
                  </div>
                  <div>
                    <p className="font-extrabold text-slate-800 text-base">{log.userName}</p>
-                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{SHIFT_DETAILS[log.type as any]?.name || log.type} • {log.date}</p>
+                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{SHIFT_DETAILS[log.type]?.name || log.type} • {log.date}</p>
                  </div>
               </div>
 
@@ -176,7 +176,7 @@ const AttendanceLogView: React.FC<AttendanceLogViewProps> = ({ role, logs, setLo
                 <img src={selectedLog.userAvatar} className="w-16 h-16 rounded-2xl border-2 border-white/20 shadow-xl" />
                 <div>
                   <h3 className="text-xl font-black">{selectedLog.userName}</h3>
-                  <p className="text-indigo-100 font-bold text-[10px] tracking-widest uppercase italic">{selectedLog.date} • {SHIFT_DETAILS[selectedLog.type as any]?.name || selectedLog.type}</p>
+                  <p className="text-indigo-100 font-bold text-[10px] tracking-widest uppercase italic">{selectedLog.date} • {SHIFT_DETAILS[selectedLog.type]?.name || selectedLog.type}</p>
                 </div>
               </div>
               <button onClick={() => setSelectedLog(null)} className="p-2 hover:bg-white/20 rounded-full transition-colors">
