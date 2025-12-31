@@ -13,55 +13,72 @@ import StaffManagementView from './components/Views/StaffManagementView';
 import AttendanceReportView from './components/Views/AttendanceReportView';
 import Login from './components/Login';
 import ChangePassword from './components/ChangePassword';
+import { db } from './lib/supabase';
 
 type TabId = 'dashboard' | 'schedule' | 'schedule-mgt' | 'requests' | 'attendance' | 'reports' | 'config' | 'staff-mgt' | 'attendance-report';
+
+const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
+  const saved = localStorage.getItem(`lapoza_${key}`);
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      return defaultValue;
+    }
+  }
+  return defaultValue;
+};
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
-  
-  const [branches, setBranches] = useState<Branch[]>([
-    { 
-      id: '1', name: 'Chi nhánh Quận 1', lat: 10.7769, lng: 106.7009, radius: 100, address: '72 Lê Thánh Tôn, Quận 1', isActive: true,
-      shifts: {
-        'SHIFT_1': { name: 'Ca 1', start: '08:00', end: '12:00' },
-        'SHIFT_2': { name: 'Ca 2', start: '12:00', end: '17:00' },
-        'SHIFT_3': { name: 'Ca 3', start: '17:00', end: '22:00' }
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // States - Khởi tạo từ Storage để App chạy ngay lập tức (Offline First)
+  const [branches, setBranches] = useState<Branch[]>(() => loadFromStorage('branches', []));
+  const [users, setUsers] = useState<User[]>(() => loadFromStorage('users', []));
+  const [attendanceLogs, setAttendanceLogs] = useState<ShiftRecord[]>(() => loadFromStorage('attendanceLogs', []));
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => loadFromStorage('leaveRequests', []));
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => loadFromStorage('notifications', []));
+  const [regulations, setRegulations] = useState<Regulation[]>(() => loadFromStorage('regulations', []));
+  const [assignments, setAssignments] = useState<Assignment[]>(() => loadFromStorage('assignments', []));
+  const [scheduleLogs, setScheduleLogs] = useState<ScheduleLog[]>(() => loadFromStorage('scheduleLogs', []));
+
+  // 1. Initial Load từ Supabase Database thực tế khi mở App
+  useEffect(() => {
+    const initData = async () => {
+      setIsSyncing(true);
+      try {
+        const data = await db.fetchInitialData();
+        if (data.users.length > 0) setUsers(data.users);
+        if (data.branches.length > 0) setBranches(data.branches);
+        if (data.attendanceLogs.length > 0) setAttendanceLogs(data.attendanceLogs);
+        if (data.leaveRequests.length > 0) setLeaveRequests(data.leaveRequests);
+      } catch (e) {
+        console.error("Database connection failed, using offline mode.");
+      } finally {
+        setIsSyncing(false);
       }
-    },
-    { 
-      id: '2', name: 'Chi nhánh Quận 7', lat: 10.7289, lng: 106.7082, radius: 150, address: '101 Tôn Dật Tiên, Quận 7', isActive: true,
-      shifts: {
-        'SHIFT_1': { name: 'Ca Sáng', start: '07:30', end: '11:30' },
-        'SHIFT_2': { name: 'Ca Chiều', start: '11:30', end: '16:30' },
-        'SHIFT_3': { name: 'Ca Tối', start: '16:30', end: '21:30' }
-      }
-    },
-  ]);
+    };
+    initData();
+  }, []);
 
-  const [users, setUsers] = useState<User[]>([
-    { id: 'admin_1', username: 'admin', name: 'Hệ thống Admin', email: 'admin@lapoza.com', password: '123', role: Role.ADMIN, avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin', status: UserStatus.WORKING, isFirstLogin: false, confirmedRegulations: [] },
-    { id: 'manager_1', username: 'quanly', name: 'Quản lý Chi nhánh', email: 'manager@lapoza.com', password: '123', role: Role.MANAGER, avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Manager', status: UserStatus.WORKING, branchId: '1', isFirstLogin: false, confirmedRegulations: [] },
-    { id: 'staff_1', username: 'nv1', name: 'Nhân viên 1', email: 'nv1@lapoza.com', password: '123', role: Role.STAFF, avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Staff1', status: UserStatus.WORKING, branchId: '1', isFirstLogin: false, confirmedRegulations: [] },
-  ]);
+  // 2. Tự động lưu LocalStorage làm Cache
+  useEffect(() => { localStorage.setItem('lapoza_branches', JSON.stringify(branches)); }, [branches]);
+  useEffect(() => { localStorage.setItem('lapoza_users', JSON.stringify(users)); }, [users]);
+  useEffect(() => { localStorage.setItem('lapoza_attendanceLogs', JSON.stringify(attendanceLogs)); }, [attendanceLogs]);
+  useEffect(() => { localStorage.setItem('lapoza_leaveRequests', JSON.stringify(leaveRequests)); }, [leaveRequests]);
+  useEffect(() => { localStorage.setItem('lapoza_notifications', JSON.stringify(notifications)); }, [notifications]);
+  useEffect(() => { localStorage.setItem('lapoza_regulations', JSON.stringify(regulations)); }, [regulations]);
+  useEffect(() => { localStorage.setItem('lapoza_assignments', JSON.stringify(assignments)); }, [assignments]);
 
-  const [attendanceLogs, setAttendanceLogs] = useState<ShiftRecord[]>([]);
-  const [scheduleLogs, setScheduleLogs] = useState<ScheduleLog[]>([]);
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
-  const [notifications, setNotifications] = useState<AppNotification[]>([
-    { id: 'n1', title: 'Chào mừng Lapoza v1.0', content: 'Hệ thống quản lý Lapoza chính thức đi vào hoạt động. Vui lòng kiểm tra lịch trực thường xuyên.', date: '2024-03-20', authorName: 'Admin' }
-  ]);
-  const [regulations, setRegulations] = useState<Regulation[]>([
-    { id: 'r1', title: 'Nội quy chấm công', content: '1. Nhân viên phải có mặt trước 5 phút để chuẩn bị.\n2. Phải chụp ảnh rõ mặt khi điểm danh.\n3. Vị trí điểm danh phải nằm trong bán kính cho phép của chi nhánh.', updatedAt: '2024-03-15' }
-  ]);
-
-  const todayDate = new Date().toISOString().split('T')[0];
-  const [assignments, setAssignments] = useState<Assignment[]>([
-    { id: 'a1', userId: 'staff_1', date: todayDate, shiftType: 'SHIFT_1', updatedAt: new Date().toISOString(), updatedBy: 'Admin' },
-    { id: 'a-mgr', userId: 'manager_1', date: todayDate, shiftType: 'SHIFT_1', updatedAt: new Date().toISOString(), updatedBy: 'Admin' },
-  ]);
+  // 3. Tự động đồng bộ ngược lên Supabase khi có thay đổi
+  useEffect(() => { if (attendanceLogs.length > 0) db.syncLogs(attendanceLogs); }, [attendanceLogs]);
+  useEffect(() => { if (users.length > 0) db.syncUsers(users); }, [users]);
+  useEffect(() => { if (branches.length > 0) db.syncBranches(branches); }, [branches]);
+  useEffect(() => { if (leaveRequests.length > 0) db.syncRequests(leaveRequests); }, [leaveRequests]);
 
   const handleLogin = (u: User) => {
     setUser(u);
@@ -104,10 +121,31 @@ const App: React.FC = () => {
     alert('Đã xác nhận đọc quy định!');
   };
 
+  const handleExportData = () => {
+    const backupData = { branches, users, attendanceLogs, leaveRequests, notifications, regulations, assignments, backupDate: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Lapoza_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportData = (data: any) => {
+    if (window.confirm("CẢNH BÁO: Việc nhập file sẽ ghi đè dữ liệu. Bạn có chắc chắn?")) {
+      if (data.branches) setBranches(data.branches);
+      if (data.users) setUsers(data.users);
+      if (data.attendanceLogs) setAttendanceLogs(data.attendanceLogs);
+      if (data.leaveRequests) setLeaveRequests(data.leaveRequests);
+      alert("Đã khôi phục dữ liệu!");
+    }
+  };
+
   const navItems = [
     { id: 'dashboard', label: 'Tổng quan', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
     { id: 'requests', label: 'Yêu cầu', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
-    { id: 'attendance', label: 'Điểm danh', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+    { id: 'attendance', label: 'Nhật ký', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
   ];
 
   if (user?.role !== Role.ADMIN) {
@@ -118,7 +156,7 @@ const App: React.FC = () => {
     navItems.push({ id: 'schedule-mgt', label: 'Điều phối', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' });
     navItems.push({ id: 'attendance-report', label: 'Chấm công', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' });
     navItems.push({ id: 'staff-mgt', label: 'Nhân sự', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' });
-    navItems.push({ id: 'reports', label: 'Báo cáo', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' });
+    navItems.push({ id: 'reports', label: 'Tài chính', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' });
   }
 
   if (user?.role === Role.ADMIN) {
@@ -162,7 +200,7 @@ const App: React.FC = () => {
       case 'reports':
         return <ReportsView role={user.role} logs={attendanceLogs} setLogs={setAttendanceLogs} user={user} branches={branches} />;
       case 'config':
-        return <SystemConfigView branches={branches} setBranches={setBranches} />;
+        return <SystemConfigView branches={branches} setBranches={setBranches} onExportData={handleExportData} onImportData={handleImportData} />;
       case 'staff-mgt':
         return <StaffManagementView role={user.role} branches={branches} users={users} setUsers={setUsers} />;
       default:
@@ -172,12 +210,18 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
+      {isSyncing && (
+        <div className="fixed top-4 right-4 z-[200] bg-white border border-indigo-100 px-4 py-2 rounded-2xl shadow-xl flex items-center gap-3 animate-in">
+           <div className="w-3 h-3 bg-indigo-600 rounded-full animate-ping"></div>
+           <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Đang đồng bộ DB...</span>
+        </div>
+      )}
       {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)}></div>}
       <aside className={`fixed lg:static inset-y-0 left-0 w-72 bg-white border-r border-slate-100 z-50 transform transition-transform duration-300 lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-8 flex flex-col h-full">
           <div className="flex items-center gap-4 mb-12">
             <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center font-black shadow-xl">LZ</div>
-            <span className="text-2xl font-black text-slate-800 tracking-tighter italic">Lapoza <span className="text-indigo-600">v1.0</span></span>
+            <span className="text-2xl font-black text-slate-800 tracking-tighter italic">Lapoza <span className="text-indigo-600">Pro</span></span>
           </div>
           <nav className="flex-1 space-y-2 overflow-y-auto pr-2">
             {navItems.map((item) => (

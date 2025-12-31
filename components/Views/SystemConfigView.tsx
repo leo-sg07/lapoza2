@@ -5,9 +5,11 @@ import { Branch, ShiftType, ShiftConfig } from '../../types';
 interface SystemConfigViewProps {
   branches: Branch[];
   setBranches: React.Dispatch<React.SetStateAction<Branch[]>>;
+  onImportData?: (data: any) => void;
+  onExportData?: () => void;
 }
 
-const SystemConfigView: React.FC<SystemConfigViewProps> = ({ branches, setBranches }) => {
+const SystemConfigView: React.FC<SystemConfigViewProps> = ({ branches, setBranches, onImportData, onExportData }) => {
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [isLocating, setIsLocating] = useState(false);
 
@@ -108,12 +110,27 @@ const SystemConfigView: React.FC<SystemConfigViewProps> = ({ branches, setBranch
     }));
   };
 
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (onImportData) onImportData(data);
+      } catch (err) {
+        alert("File không hợp lệ!");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
-    <div className="p-4 md:p-8 animate-in space-y-8 pb-20">
+    <div className="p-4 md:p-8 animate-in space-y-8 pb-32 h-full overflow-y-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
         <div>
           <h2 className="text-3xl font-black text-slate-800 italic tracking-tight">Cấu hình <span className="text-indigo-600">Core</span></h2>
-          <p className="text-sm text-slate-500 font-medium italic underline">Quản lý mạng lưới chi nhánh và định vị điểm danh.</p>
+          <p className="text-sm text-slate-500 font-medium italic">Quản lý mạng lưới chi nhánh và bảo mật dữ liệu.</p>
         </div>
         <button 
           onClick={createNewBranch}
@@ -123,6 +140,33 @@ const SystemConfigView: React.FC<SystemConfigViewProps> = ({ branches, setBranch
           Thêm chi nhánh
         </button>
       </div>
+
+      {/* Data Management Tools - Giải pháp cho việc lo mất dữ liệu */}
+      <section className="bg-white p-8 rounded-[3.5rem] border-2 border-dashed border-indigo-100 space-y-6">
+        <div className="flex items-center gap-4">
+           <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+           </div>
+           <div>
+              <h3 className="font-black text-slate-800 text-lg italic">Quản lý Dữ liệu Toàn hệ thống</h3>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Sao lưu dữ liệu của bạn để cất vào Google Drive cá nhân</p>
+           </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+           <button 
+             onClick={onExportData}
+             className="flex items-center justify-center gap-3 py-5 bg-slate-900 text-white rounded-[1.5rem] font-black text-xs hover:bg-slate-800 transition-all shadow-xl shadow-slate-100"
+           >
+             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+             XUẤT FILE BACKUP (.JSON)
+           </button>
+           <label className="flex items-center justify-center gap-3 py-5 bg-white border-2 border-indigo-600 text-indigo-600 rounded-[1.5rem] font-black text-xs hover:bg-indigo-50 transition-all cursor-pointer">
+             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+             NHẬP DỮ LIỆU TỪ FILE
+             <input type="file" accept=".json" onChange={handleFileImport} className="hidden" />
+           </label>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {branches.map(branch => (
@@ -169,7 +213,6 @@ const SystemConfigView: React.FC<SystemConfigViewProps> = ({ branches, setBranch
                   </div>
                   <div className="space-y-3">
                     {Object.entries(editingBranch.shifts).map(([type, details]) => {
-                      // Fixed: Cast details to ShiftConfig to fix unknown type and spread errors
                       const config = details as ShiftConfig;
                       return (
                         <div key={type} className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm">
