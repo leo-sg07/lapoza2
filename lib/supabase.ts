@@ -82,7 +82,7 @@ export const db = {
       check_in_photo: l.checkInPhoto,
       check_out_photo: l.checkOutPhoto,
       status: l.status,
-      closing_data: l.closing_data,
+      closing_data: l.closingData,
       branch_id: l.branchId
     })));
     if (error) console.error('❌ Lỗi đồng bộ Chấm công:', error.message);
@@ -91,7 +91,6 @@ export const db = {
   async syncBranches(branches: any[]) {
     if (!branches || branches.length === 0) return;
     
-    // Ép kiểu dữ liệu nghiêm ngặt để khớp với Supabase (float8, text)
     const payload = branches.map(b => ({
       id: String(b.id),
       name: String(b.name),
@@ -101,21 +100,20 @@ export const db = {
       address: String(b.address || '')
     }));
 
-    console.log('🔄 Đang gửi dữ liệu chi nhánh lên Cloud...', payload);
-
-    const { data, error } = await supabase
+    // Lấy status từ phản hồi thay vì từ object error
+    const { error, status } = await supabase
       .from('branches')
-      .upsert(payload, { onConflict: 'id' })
-      .select();
+      .upsert(payload, { onConflict: 'id' });
 
     if (error) {
       console.error('❌ Lỗi Supabase Cloud:', error.message);
-      if (error.status === 403 || error.status === 401) {
+      // Sử dụng status lấy từ kết quả trả về để kiểm tra quyền RLS
+      if (status === 403 || status === 401) {
         console.error('👉 NGUYÊN NHÂN: RLS (Row Level Security) đang chặn lệnh Lưu.');
         console.error('👉 CÁCH FIX: Trong Supabase, vào Authentication -> Policies -> Bảng "branches" -> Tạo Policy "Enable Insert/Update for all users".');
       }
     } else {
-      console.log('✅ Đã đồng bộ chi nhánh thành công!', data);
+      console.log('✅ Đã đồng bộ chi nhánh thành công lên Cloud.');
     }
   },
 
