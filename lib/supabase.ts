@@ -9,10 +9,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export const db = {
   async fetchInitialData() {
     try {
-      const { data: branches } = await supabase.from('branches').select('*');
-      const { data: users } = await supabase.from('users').select('*');
-      const { data: logs } = await supabase.from('attendance_logs').select('*').order('date', { ascending: false });
-      const { data: requests } = await supabase.from('leave_requests').select('*').order('date', { ascending: false });
+      const { data: branches, error: bErr } = await supabase.from('branches').select('*');
+      const { data: users, error: uErr } = await supabase.from('users').select('*');
+      const { data: logs, error: lErr } = await supabase.from('attendance_logs').select('*').order('date', { ascending: false });
+      const { data: requests, error: rErr } = await supabase.from('leave_requests').select('*').order('date', { ascending: false });
+
+      if (bErr || uErr || lErr || rErr) {
+        console.warn("Lưu ý: Một số bảng có thể chưa có dữ liệu hoặc bị chặn bởi RLS:", { bErr, uErr, lErr, rErr });
+      }
 
       return {
         branches: branches || [],
@@ -38,7 +42,7 @@ export const db = {
         })) || []
       };
     } catch (error) {
-      console.error("Lỗi khi tải dữ liệu ban đầu:", error);
+      console.error("Lỗi khi kết nối Supabase Cloud:", error);
       return { branches: [], users: [], attendanceLogs: [], leaveRequests: [] };
     }
   },
@@ -61,11 +65,7 @@ export const db = {
     }));
 
     const { error } = await supabase.from('users').upsert(payload);
-    if (error) {
-      console.error('❌ Lỗi đồng bộ Nhân sự:', error.message);
-    } else {
-      console.log('✅ Đã đồng bộ nhân sự lên Cloud.');
-    }
+    if (error) console.error('❌ Lỗi đồng bộ Nhân sự:', error.message);
   },
 
   async syncLogs(logs: any[]) {
@@ -82,7 +82,7 @@ export const db = {
       check_in_photo: l.checkInPhoto,
       check_out_photo: l.checkOutPhoto,
       status: l.status,
-      closing_data: l.closingData,
+      closing_data: l.closing_data,
       branch_id: l.branchId
     })));
     if (error) console.error('❌ Lỗi đồng bộ Chấm công:', error.message);
@@ -91,23 +91,31 @@ export const db = {
   async syncBranches(branches: any[]) {
     if (!branches || branches.length === 0) return;
     
-    // MAP DỮ LIỆU ĐỂ KHỚP VỚI CÁC CỘT TRONG HÌNH CHỤP TABLE EDITOR
+    // Ép kiểu dữ liệu nghiêm ngặt để khớp với Supabase (float8, text)
     const payload = branches.map(b => ({
-      id: b.id,
-      name: b.name,
-      lat: b.lat,
-      lng: b.lng,
-      radius: b.radius,
-      address: b.address || ''
-      // Tạm thời bỏ qua 'shifts' vì bảng của bạn chưa có cột jsonb này
+      id: String(b.id),
+      name: String(b.name),
+      lat: Number(b.lat),
+      lng: Number(b.lng),
+      radius: Number(b.radius),
+      address: String(b.address || '')
     }));
 
-    const { error } = await supabase.from('branches').upsert(payload);
+    console.log('🔄 Đang gửi dữ liệu chi nhánh lên Cloud...', payload);
+
+    const { data, error } = await supabase
+      .from('branches')
+      .upsert(payload, { onConflict: 'id' })
+      .select();
+
     if (error) {
-      console.error('❌ Lỗi đồng bộ Chi nhánh:', error.message);
-      console.log('💡 Gợi ý: Kiểm tra xem các cột id, name, lat, lng, radius, address đã đúng kiểu dữ liệu chưa.');
+      console.error('❌ Lỗi Supabase Cloud:', error.message);
+      if (error.status === 403 || error.status === 401) {
+        console.error('👉 NGUYÊN NHÂN: RLS (Row Level Security) đang chặn lệnh Lưu.');
+        console.error('👉 CÁCH FIX: Trong Supabase, vào Authentication -> Policies -> Bảng "branches" -> Tạo Policy "Enable Insert/Update for all users".');
+      }
     } else {
-      console.log('✅ Đã đồng bộ chi nhánh lên Cloud.');
+      console.log('✅ Đã đồng bộ chi nhánh thành công!', data);
     }
   },
 
