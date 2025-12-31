@@ -127,7 +127,6 @@ const App: React.FC = () => {
 
   if (!user) return <Login onLogin={handleLogin} users={users} />;
   
-  // Hiển thị đổi mật khẩu lần đầu hoặc khi nhấn đổi mật khẩu
   if (user.isFirstLogin || isChangingPassword) {
     return <ChangePassword onPasswordChange={handlePasswordUpdate} onCancel={() => setIsChangingPassword(false)} showCancel={!user.isFirstLogin} />;
   }

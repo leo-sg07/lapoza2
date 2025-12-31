@@ -1,6 +1,6 @@
 {
   "name": "ShiftMaster Pro",
-  "description": "A high-performance shift management and smart attendance system with facial verification and geo-fencing.",
+  "description": "Hệ thống quản lý ca trực và điểm danh thông minh Lapoza v1.0",
   "requestFramePermissions": [
     "camera",
     "geolocation"
