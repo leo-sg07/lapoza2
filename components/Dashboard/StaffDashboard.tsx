@@ -28,9 +28,23 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({
     return assignments
       .filter(a => a.userId === user.id && a.date === todayDate)
       .map(a => {
-        const logId = `s-${todayDate}-${user.id}-${a.shiftType}`;
-        const existingLog = attendanceLogs.find(l => l.id === logId);
-        return existingLog || { id: logId, userId: user.id, userName: user.name, userAvatar: user.avatar, date: todayDate, type: a.shiftType, status: 'PENDING', branchId: user.branchId } as ShiftRecord;
+        // Tìm bản ghi log thực tế dựa trên các tiêu chí thay vì chỉ dùng ID cứng
+        const existingLog = attendanceLogs.find(l => 
+          l.userId === user.id && 
+          l.date === todayDate && 
+          l.type === a.shiftType
+        );
+        
+        return existingLog || { 
+          id: `s-${todayDate}-${user.id}-${a.shiftType}`, 
+          userId: user.id, 
+          userName: user.name, 
+          userAvatar: user.avatar, 
+          date: todayDate, 
+          type: a.shiftType, 
+          status: 'PENDING', 
+          branchId: user.branchId 
+        } as ShiftRecord;
       });
   }, [assignments, attendanceLogs, user, todayDate]);
 
@@ -42,21 +56,42 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({
     const targetShift = assignedShifts.find(s => s.id === shiftId);
     if (!targetShift) return;
     
-    // Giả định tính toán status đơn giản
-    const updatedRecord = type === 'CHECK_IN' 
+    // Cập nhật record với giờ và ảnh
+    const updatedRecord: ShiftRecord = type === 'CHECK_IN' 
       ? { ...targetShift, checkInTime: timeStr, checkInPhoto: photo, checkInStatus: AttendanceStatus.ON_TIME } 
-      : { ...targetShift, checkOutTime: timeStr, checkOutPhoto: photo, checkOutStatus: AttendanceStatus.ON_TIME };
+      : { 
+          ...targetShift, 
+          checkOutTime: timeStr, 
+          checkOutPhoto: photo, 
+          checkOutStatus: AttendanceStatus.ON_TIME,
+          // Tự động chuyển trạng thái thành COMPLETED khi Ra ca để Dashboard cập nhật
+          status: 'COMPLETED' 
+        };
     
     onAttendanceUpdate(updatedRecord);
     setActiveAttendance(null);
-    if (type === 'CHECK_OUT') setShowClosingForm(shiftId);
+    
+    // Hiển thị form chốt ca nếu là Ra ca
+    if (type === 'CHECK_OUT') {
+      setShowClosingForm(shiftId);
+    }
   };
 
   const handleClosingSubmit = (data: ShiftClosingData) => {
-    const targetShift = assignedShifts.find(s => s.id === showClosingForm);
-    if (targetShift) onAttendanceUpdate({ ...targetShift, closingData: data, status: 'COMPLETED' as const });
+    const targetShift = attendanceLogs.find(s => s.id === showClosingForm) || assignedShifts.find(s => s.id === showClosingForm);
+    if (targetShift) {
+      onAttendanceUpdate({ 
+        ...targetShift, 
+        closingData: data, 
+        status: 'COMPLETED' 
+      });
+    }
     setShowClosingForm(null);
-    alert('Đã chốt ca & báo cáo thành công!');
+    alert('Đã lưu báo cáo chốt ca thành công!');
+  };
+
+  const handleSkipClosing = () => {
+    setShowClosingForm(null);
   };
 
   return (
@@ -73,7 +108,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({
         <div className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[8px] font-black uppercase tracking-widest animate-pulse">Trực tuyến</div>
       </header>
 
-      {/* Notifications - Mobile Swipe Style */}
+      {/* Notifications */}
       <section className="space-y-3">
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 italic">Thông báo mới</h3>
         <div className="flex gap-3 overflow-x-auto pb-2 snap-x custom-scrollbar">
@@ -92,46 +127,63 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({
         </div>
       </section>
 
-      {/* Today Shifts - Focus of the day */}
+      {/* Today Shifts */}
       <section className="space-y-4">
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 italic">Ca trực của bạn</h3>
         <div className="grid grid-cols-1 gap-4">
-          {assignedShifts.map(shift => {
-            const config = userBranch.shifts[shift.type];
-            return (
-              <div key={shift.id} className="bg-white border border-slate-100 p-6 rounded-[2.5rem] shadow-sm space-y-6">
-                <div className="flex justify-between items-center">
-                  <span className="px-3 py-1 bg-slate-50 text-slate-500 rounded-lg text-[9px] font-black uppercase">{config?.name}</span>
-                  <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${shift.status === 'COMPLETED' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>{shift.status}</span>
+          {assignedShifts.length === 0 ? (
+            <div className="bg-white border-2 border-dashed border-slate-100 p-10 rounded-[2.5rem] text-center">
+              <p className="text-slate-400 font-black italic uppercase text-xs">Hôm nay bạn không có ca trực</p>
+            </div>
+          ) : (
+            assignedShifts.map(shift => {
+              const config = userBranch.shifts[shift.type];
+              return (
+                <div key={shift.id} className="bg-white border border-slate-100 p-6 rounded-[2.5rem] shadow-sm space-y-6">
+                  <div className="flex justify-between items-center">
+                    <span className="px-3 py-1 bg-slate-50 text-slate-500 rounded-lg text-[9px] font-black uppercase">{config?.name || shift.type}</span>
+                    <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${shift.status === 'COMPLETED' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
+                      {shift.status === 'COMPLETED' ? 'HOÀN TẤT' : 'ĐANG TRỰC'}
+                    </span>
+                  </div>
+                  <div className="text-center py-2">
+                     <p className="text-2xl font-black text-slate-800 italic">{config?.start || '--:--'} - {config?.end || '--:--'}</p>
+                     <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Giờ làm việc quy định</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                     <div className="bg-slate-50 rounded-2xl p-3 text-center">
+                        <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Vào ca</p>
+                        <p className="text-sm font-black text-slate-800">{shift.checkInTime || '--:--'}</p>
+                     </div>
+                     <div className="bg-slate-50 rounded-2xl p-3 text-center">
+                        <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Ra ca</p>
+                        <p className="text-sm font-black text-slate-800">{shift.checkOutTime || '--:--'}</p>
+                     </div>
+                  </div>
+                  
+                  {!shift.checkInTime ? (
+                    <button onClick={() => setActiveAttendance({ type: 'CHECK_IN', shiftId: shift.id })} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all">Điểm danh Vào Ca</button>
+                  ) : shift.status !== 'COMPLETED' ? (
+                    <button onClick={() => setActiveAttendance({ type: 'CHECK_OUT', shiftId: shift.id })} className="w-full bg-slate-800 text-white py-4 rounded-2xl font-black text-sm active:scale-95 transition-all">Điểm danh Ra Ca</button>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="text-center py-4 bg-slate-100 rounded-2xl text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2">
+                        <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                        Ca làm việc đã hoàn tất
+                      </div>
+                      {!shift.closingData && (
+                        <button onClick={() => setShowClosingForm(shift.id)} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black text-xs uppercase tracking-widest active:bg-indigo-600 active:text-white transition-all">Bổ sung báo cáo chốt ca</button>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="text-center py-2">
-                   <p className="text-2xl font-black text-slate-800 italic">{config?.start} - {config?.end}</p>
-                   <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Giờ làm việc quy định</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                   <div className="bg-slate-50 rounded-2xl p-3 text-center">
-                      <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Vào ca</p>
-                      <p className="text-sm font-black text-slate-800">{shift.checkInTime || '--:--'}</p>
-                   </div>
-                   <div className="bg-slate-50 rounded-2xl p-3 text-center">
-                      <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Ra ca</p>
-                      <p className="text-sm font-black text-slate-800">{shift.checkOutTime || '--:--'}</p>
-                   </div>
-                </div>
-                {!shift.checkInTime ? (
-                  <button onClick={() => setActiveAttendance({ type: 'CHECK_IN', shiftId: shift.id })} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all">Điểm danh Vào Ca</button>
-                ) : shift.status !== 'COMPLETED' ? (
-                  <button onClick={() => setActiveAttendance({ type: 'CHECK_OUT', shiftId: shift.id })} className="w-full bg-slate-800 text-white py-4 rounded-2xl font-black text-sm active:scale-95 transition-all">Điểm danh Ra Ca</button>
-                ) : (
-                  <div className="text-center py-4 bg-slate-100 rounded-2xl text-[9px] font-black text-slate-400 uppercase tracking-widest">Ca đã hoàn tất</div>
-                )}
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </section>
 
-      {/* Regulations Section - Fixed line-breaks and mobile view */}
+      {/* Regulations Section */}
       <section className="space-y-3">
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 italic">Quy định & Hướng dẫn</h3>
         <div className="space-y-4">
@@ -161,7 +213,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({
       </section>
 
       {activeAttendance && <AttendanceModal type={activeAttendance.type} onClose={() => setActiveAttendance(null)} onSuccess={handleAttendanceSuccess} branch={userBranch} />}
-      {showClosingForm && <ShiftClosingForm onSubmit={handleClosingSubmit} onSkip={() => setShowClosingForm(null)} />}
+      {showClosingForm && <ShiftClosingForm onSubmit={handleClosingSubmit} onSkip={handleSkipClosing} />}
     </div>
   );
 };
